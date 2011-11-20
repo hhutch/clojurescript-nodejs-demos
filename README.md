@@ -1,9 +1,9 @@
 # Clojurescript + NodeJS demos
 
-A set of CLojurescript demos using NodeJS interop.
+A set of Clojurescript demos using NodeJs interop.
 
 Compile using {:optimizations :simple :target :nodejs}
-Advanced compilation will cause these to fail.
+*Advanced compilation will cause these to fail.*
 
 ### These are an exploration of the possibilities of Clojurescript + NodeJs as Unix integration tools
 
