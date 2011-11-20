@@ -1,9 +1,9 @@
-(ns cljs-demo.meter
+(ns clojurescript-nodejs-demos.meter
   (:require [cljs.nodejs :as node]))
 
 (def multimeter (node/require "multimeter"))
 
-
+; ## Currently you will have to run 'reset' command to get sane terminal settings after running this
 (defn start [& _]
   (let [multi (multimeter. node/process)]
     (. multi (on "^C"
