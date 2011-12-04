@@ -1,6 +1,7 @@
 (ns cljs-demo.getit
   (:use-macros [clojure.core.match.js :only [match]])
-  (:require    [cljs.nodejs :as node]))
+  (:require    [goog.dom :as dom]
+                [cljs.nodejs :as node]))
 
 ;; ## This application does not compile under :advanced
 
@@ -37,18 +38,21 @@
      :method "GET"      ;; this is ghetto
      :path (get raw "pathname")}))
 
-(doto commander
-  (.version "0.0.1")
-  (.option "-u, --url [type]" "URL to fetch")
-  (.option "-r, --recursive" "Recursively fetch")
-  (.option "-a, --fetchall" "fetchall dependencies")
-  (.parse process.argv))
-
 (def page-data (atom []))
 
-(defn start [& _]
-  (if (.url commander)
-    (let [params (url-parse (.url commander))
+(defn list-handler [val]
+  (. val (split ",")))
+
+(doto commander
+  (.version "0.0.1")
+  (.usage "[options] <url>")
+  (.option "-o, --outfile [type]" "the file to download to")
+  (.option "-r, --showresources <items>" "a comma separated list of tags to parse for" list-handler)
+  (.parse process.argv))
+
+(defn download-file
+  [url]
+    (let [params (url-parse url)
           req (. http (request (clj->js params)
              (fn [res]
                (doto res
@@ -56,18 +60,42 @@
                  (.on "data" (fn [chunk]
                                  (swap! page-data assoc (count @page-data) chunk)))
                  (.on "end" (fn [] 
+                              (if (or (not    (.outfile commander))
+                                      (not (= (.outfile commander) "-")))
                                 (let [parts (js->clj (.split (:path params) "/"))
-                                      file-name (first (reverse parts))]
+                                      file-name (if (.outfile commander)
+                                                    (.outfile commander)
+                                                    (first (reverse parts)))]
                                   (. fs (writeFileSync file-name (apply str @page-data) )))
-                                (if (.recursive commander)
-                                    (let [window (.. jsdom (jsdom (apply str @page-data)) (createWindow))
-                                          anchors (.. window document (getElementsByTagName "a"))]
-                                      (doseq [i (range (.length anchors))]
-                                        (let [tag (. anchors (item i))]
-                                          (println (str (.innerHTML tag) ": " (. tag (getAttribute "href")))))) )) ))) )))]
+                                ; intended that passing -o - would print to stdout, but commander can't handle this
+                                (prn (apply str @page-data)) )
+                              (if (.showresources commander)
+                                  (let [window (.. jsdom (jsdom (apply str @page-data)) (createWindow))
+                                        tag-list (js->clj (.showresources commander))]
+                                    ;; ref for trying to get goog.dom parsing in nodejs
+                                    ;(. goog.dom (setDocument (.document window)))
+                                    ;anchors (dom/getElementsByTagNameAndClass "a")]
+                                    (doseq [tag tag-list]
+                                      (let [anchors (.. window document (getElementsByTagName tag))]
+                                        (prn (str "--- Showing: " tag " ---"))
+                                        (doseq [i (range (.length anchors))]
+                                          (let [elem (. anchors (item i))
+                                                info (cond (= "a" tag) (str ": " (. elem (getAttribute "href")))
+                                                           (= "img" tag) (str ": " (. elem (getAttribute "src")))
+                                                           :else "") ]
+                                            ;; NOTE: this currently throws errors if the innerHTML is not plain textnode
+                                            (prn (str (.innerHTML elem) info)))) )) ))
+                              ))) )))]
         (doto req
           (.write "data\n")
           (.write "data\n")
-          (.end) ) )))
+          (.end) ) ) )
+  
+; '(:link :a :img :script :style)
+
+(defn start [& _]
+  (let [url-list (js->clj (.args commander))]
+    (if (url-list 0)
+      (download-file (url-list 0) ))))
 
 (set! *main-cli-fn* start)
